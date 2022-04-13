@@ -1,0 +1,287 @@
+﻿using MySql.Data.MySqlClient;
+using System;
+using System.Collections.Generic;
+
+namespace TestGameeServer
+{
+    enum eExecuteType
+    {
+        INSERT = 0,
+        UPDATE,
+        DELETE,
+        SELECT
+    }
+
+    class DBCONN
+    {
+        string IPADDR = "localhost";
+        int PORT = 3306;
+        string DBNAME = "knockkncokdungeon";
+        string ID = "root";
+        string PWD = "sbsgame123";
+        MySqlConnection conn;
+
+        //생성자, DB 연결
+        public DBCONN()
+        {
+            conn = DBConnection();
+
+            if (conn == null)
+            {
+                throw new Exception();
+            }
+        }
+        //DB 연결, DB연결 확인 함수
+        MySqlConnection DBConnection()
+        {
+            MySqlConnection conTemp = null;
+
+            //"Server=아이피;Port=번호;Database=스키마이름(모델);Uid=root;Pwd=비번" 
+            using (conn = new MySqlConnection("Server=" + IPADDR + ";Port=" + PORT + ";Database=" + DBNAME + ";Uid=" + ID + ";Pwd=" + PWD)) ;
+
+            try
+            {
+                conn.Open();
+
+                if (conn.Ping())
+                {
+                    conTemp = conn;
+                    Console.WriteLine("Connected To DB Sucess");
+                }
+                else
+                {
+                    conTemp = null;
+                    Console.WriteLine("Connected To DB Fail");
+                }
+
+                conn.Close();
+            }
+            catch (Exception e)
+            {
+                conTemp = null;
+                Console.WriteLine("Fail : " + e.ToString());
+            }
+
+            return conTemp;
+        }
+        //쿼리 실행 함수
+        public bool ExecuteQuery(string query, eExecuteType eExType)
+        {
+            try
+            {
+                conn.Open();
+
+                if (eExType != eExecuteType.SELECT)
+                {
+                    MySqlCommand command = new MySqlCommand(query, conn);
+
+                    if (command.ExecuteNonQuery() == 1)
+                        Console.WriteLine("Operation Complete");
+                    else
+                        Console.WriteLine("Update Fail");
+                }
+
+                conn.Close();
+                return true;
+            }
+            catch (Exception ep)
+            {
+                Console.WriteLine("실패 : " + ep.ToString());
+                return false;
+            }
+        }
+        //업데이트 쿼리 생성 함수
+        public void UpdateQueryMake()
+        {
+
+        }
+        //조회 확인용 함수
+        public int selectCount(string tableName, string wStr, string wVal)
+        {
+            string query = "SELECT * FROM " + tableName + " WHERE " + wStr + " = '" + wVal + "'";
+
+            int cnt = 0;
+
+            try
+            {
+                conn.Open();
+                MySqlCommand command = new MySqlCommand(query, conn);
+                MySqlDataReader selectData = command.ExecuteReader();
+
+                while (selectData.Read())
+                {
+                    cnt++;
+                }
+
+                selectData.Close();
+                conn.Close();
+            }
+            catch (Exception ep)
+            {
+                Console.WriteLine("실패 : " + ep.ToString());
+            }
+
+            return cnt;
+        }
+        //select 쿼리 함수
+        public List<string[]> selectValue(string tableName, string wStr, string wVal, params string[] selecStr)
+        {
+            string[] rowData = new string[selecStr.Length];
+            List<string[]> datas = new List<string[]>();
+            string query = "SELECT ";
+
+            for (int i = 0; i < selecStr.Length; i++)
+            {
+                query += selecStr[i].ToString();
+                if (i != selecStr.Length - 1)
+                    query += ", ";
+            }
+
+            query += " FROM " + tableName + " WHERE " + wStr + " = '" + wVal + "'";
+
+            try
+            {
+                conn.Open();
+                MySqlCommand command = new MySqlCommand(query, conn);
+                MySqlDataReader selectData = command.ExecuteReader();
+
+                int i = 0;
+                while (selectData.Read())
+                {
+                    for (int j = 0; j < rowData.Length; j++)
+                    {
+                        rowData[j] = selectData.GetString(j);
+                    }
+                    datas.Add(rowData);
+                    i++;
+                }
+
+                selectData.Close();
+                conn.Close();
+            }
+            catch (Exception ep)
+            {
+                datas = null;
+                Console.WriteLine("실패 : " + ep.ToString());
+            }
+
+
+            return datas;
+        }
+        //ID중복 확인 함수
+        public bool IDChecking(string targetID)
+        {
+
+
+            bool succes;
+            int row = selectCount("userinfo", "ID", targetID);
+
+            if (row > 0)
+            {//아이디 존재
+                succes = false;
+            }
+            else
+                succes = true;
+
+            return succes;
+        }
+        //Insert 함수
+        public void InsertUserInfoTable(string id, string pwd, string nname)
+        {
+            string joindate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            EncryptionPWD EnPwd = new EncryptionPWD();
+            pwd = EnPwd.SHA256Hash(pwd);
+            string query = "INSERT INTO userinfo(USER_ID, USER_PWD, NICKNAME, JOIN_DATE) VALUES('" + id + "','" + pwd + "','"+nname+"', '" + joindate + "')";
+            ExecuteQuery(query, eExecuteType.INSERT);
+            
+            //$$$$$$
+            //인서트후에 퍼스널테이블에 인서트(캐릭터 얻으면 추가로 들어감), 인게임 테이블 인서트
+            //가입후에 들어가는 것은 default로 들어감
+
+
+
+        }
+        //Delete 함수
+        public void DeleteUserInfoTable(string id)
+        {
+            string query = "DELETE FROM userinfo WHERE USER_ID = '" + id + "'";
+            ExecuteQuery(query, eExecuteType.DELETE);
+        }
+        //Update함수
+        public void updataUserInfo(string id, string avtname)
+        {
+            string query = "UPDATE userinfo SET NICKNAME = '" + avtname + "' WHERE USER_ID = '" + id + "'";
+            ExecuteQuery(query, eExecuteType.UPDATE);
+        }
+        //아바타이름 중복 함수
+        public bool avtNameChecking(string avtname)
+        {
+
+          
+
+            bool succes;
+            int row = selectCount("userinfo", "NICKNAME", avtname);
+
+            if (row > 0)
+            {//동일 이름 존재
+                succes = false;
+            }
+            else
+                succes = true;
+
+            return succes;
+        }
+        //로그인, 로그인정보 함수
+        public bool LoginPro(string id, string pw, bool isResign = false)
+        {
+            bool succes;
+
+            int row = selectCount("userinfo", "USER_ID", id);
+            int row1 = selectCount("userinfot", "USER_PWD", pw);
+
+            if (row > 0 && row1 > 0)
+            {
+                if (!isResign)
+                {
+                    List<string[]> colval = new List<string[]>();
+
+                    //여기 이상함 고쳐야함
+                    colval = selectValue("userinfo", "USER_ID", id, "NICKNAME", "GOLD", "CASH");
+                    Console.WriteLine("캐릭터명 : " + colval[0][0]);
+                    Console.WriteLine("Gold : " + colval[0][1]);
+                    Console.WriteLine("Cash : " + colval[0][2]);
+                    succes = true;
+                }
+                else
+                {
+                    char selCh;
+                    Console.Write("정말 탈퇴 하시겠습니까[예(ㅛ/Y/y)][아니요(ㅜ/N/n)] : ");
+                    selCh = char.Parse(Console.ReadLine());
+
+                    if (selCh == 'ㅛ' || selCh == 'y' || selCh == 'Y')
+                    {
+                        DeleteUserInfoTable(id);
+                    }
+                    else if (selCh == 'ㅜ' || selCh == 'n' || selCh == 'N')
+                    {
+                        Console.WriteLine("취소 하셨습니다");
+                    }
+                    else
+                    {
+                        return false;
+                    }
+
+                    succes = true;
+                }
+            }
+            else
+            {
+                Console.WriteLine("아이디나 비밀번호가 없습니다");
+                succes = false;
+            }
+
+            return succes;
+        }
+
+    }
+}
